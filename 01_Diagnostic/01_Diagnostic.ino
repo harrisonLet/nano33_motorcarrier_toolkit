@@ -46,10 +46,14 @@ void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
   Serial.begin(115200);
 
-  // Wait for the Serial Monitor, but don't hang forever if nobody opens one.
-  unsigned long t0 = millis();
-  while (!Serial && millis() - t0 < 5000) {}
-  delay(300);
+  // Native USB doesn't buffer output for a monitor that isn't open yet, so
+  // wait for a keypress before running -- otherwise a late-opened monitor
+  // misses the whole one-shot test run.
+  while (Serial.available() == 0) {
+    if (Serial) Serial.println("Send any character to start the diagnostic...");
+    delay(1000);
+  }
+  while (Serial.available() > 0) Serial.read();
 
   banner("NANO 33 IoT + MOTOR CARRIER DIAGNOSTIC");
   Serial.println("Starting tests. This will take about 15 seconds.");
@@ -146,7 +150,10 @@ void setup() {
     enc2ok = encoderAndAsk(encoder2, M2, "encoder2 / M2");
   }
 
-  // ---- Summary ----
+  printSummary();
+}
+
+void printSummary() {
   banner("SUMMARY");
   printResult("IMU (baseline)", imuOK);
   printResult("Carrier/D11 handshake", carrierOK);
@@ -184,7 +191,10 @@ void setup() {
 }
 
 void loop() {
-  // Nothing to do -- all tests run once in setup().
+  // Tests run once in setup(); keep re-printing the summary so a monitor
+  // attached after the run still sees the results.
+  delay(10000);
+  printSummary();
 }
 
 void printResult(const char* name, bool ok) {

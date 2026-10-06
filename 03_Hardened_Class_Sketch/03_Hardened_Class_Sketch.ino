@@ -27,29 +27,21 @@
     - 6 fast blinks, repeating -> Motor Carrier / D11 didn't respond
   (Normal boot: LED goes solid HIGH briefly then the sketch proceeds.)
 
+  WiFi/UDP mode has been removed (the course only uses serial), so this no
+  longer needs WiFiNINA, udp_access_point.*, or credentials.h.
+
   Diffs from the original are marked with "// HARDENED:" comments.
   Everything else below is unchanged from nanobot_arduino.ino.
 */
 
-#include <WiFiNINA.h>
 #include <ArduinoJson.h>
 #include <Arduino_LSM6DS3.h>
 #include <ArduinoMotorCarrier.h>
-#include <WiFiUdp.h>
-#include "udp_access_point.h"
 #include <QTRSensors.h>            // Click here to get the library: http://librarymanager/All#QTRSensors
 #include "Adafruit_TCS34725.h"     // Click here to get the library: http://librarymanager/ALL#Adafruit_TCS34725
 
-//////// USER FLAGs /////////
-int sendMode = 0; //0 for serial, 1 for wifi
-/////////////////////////////
-
-
 //Global variables
 float red, green, blue;
-
-// create the WiFi-UDP object
-udp_access_point * wifi;
 
 // Reflectance sensor setup variables
 QTRSensors qtr;
@@ -356,15 +348,8 @@ void sendError() {
 }
 
 void sendJson(char replyBuffer[JSON_BUFFER_SIZE], size_t replySize) {
-  if (sendMode == 0) {
-    Serial.write(replyBuffer, replySize);
-    Serial.println();
-  }
-  else if (sendMode == 1) {
-    wifi->sendPacket(replyBuffer);
-    Serial.print("Sent: ");
-    Serial.println(replyBuffer);
-  }
+  Serial.write(replyBuffer, replySize);
+  Serial.println();
 }
 
 // HARDENED: visible-on-the-bench failure signal, distinct pattern per subsystem,
@@ -388,7 +373,7 @@ void setup() {
 
   // HARDENED: give the native-USB CDC port a moment to actually enumerate
   // before we start doing I2C work. This does not wait for a Serial Monitor
-  // to be opened (sendMode==0 still does that further down, as before).
+  // to be opened (the `while (!Serial)` at the end of setup() does that).
   delay(200);
 
   // HARDENED: IMU check is no longer a fatal `while(1)` hang. A dead IMU
@@ -427,34 +412,16 @@ void setup() {
   M3.setDuty(0);
   M4.setDuty(0);
 
-  if (sendMode == 0) { //Only hang here if the arduino is for serial comm
-    while (!Serial);
-  }
-
-  if (sendMode == 1) { //Only do this if the arduino is for wifi comm
-    wifi = new udp_access_point(551, IPAddress(192, 168, 1, 100));
-    if (wifi->isReady()) {
-      Serial.println("WiFi Initialized");
-    }
-  }
+  while (!Serial);
 }
 
 void loop() {
 
-  if (sendMode == 0) {
-    if (Serial.available() > 0) {
-      // Read the incoming data into the jsonBuffer
-      size_t bytesRead = Serial.readBytesUntil('\n', jsonBuffer, JSON_BUFFER_SIZE - 1);
-      jsonBuffer[bytesRead] = '\0'; // Null-terminate the string
-      executeCommand(jsonBuffer);
-    }
-  }
-  else if (sendMode == 1) {
-    if (wifi->checkForPacket()) {
-      strncpy(jsonBuffer, wifi->getPacket(), sizeof(jsonBuffer) - 1);
-      Serial.println(jsonBuffer);
-      executeCommand(jsonBuffer);
-    }
+  if (Serial.available() > 0) {
+    // Read the incoming data into the jsonBuffer
+    size_t bytesRead = Serial.readBytesUntil('\n', jsonBuffer, JSON_BUFFER_SIZE - 1);
+    jsonBuffer[bytesRead] = '\0'; // Null-terminate the string
+    executeCommand(jsonBuffer);
   }
 }
 
@@ -528,10 +495,6 @@ void executeCommand(String input) {
     // perform an "init" operation
     else if (strcmp(mode, "init") == 0) {
       if (strcmp(periph, "arduino") == 0) {
-        digitalWrite(LED_BUILTIN, 1);
-        sendAck();
-      }
-      else if (strcmp(periph, "wifi") == 0) {
         digitalWrite(LED_BUILTIN, 1);
         sendAck();
       }
